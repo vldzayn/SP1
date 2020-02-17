@@ -27,6 +27,892 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+Исследование успешной продажи игр
+Из открытых источников доступны исторические данные о продажах игр, оценки пользователей и экспертов, жанры и платформы (
+например, Xbox или PlayStation). Нужно выявить определяющие успешность игры закономерности. 
+Это позволит сделать ставку на потенциально популярный продукт и спланировать рекламные кампании.
+
+Шаг 1. Открываем файл с данными и изучаем общую информацию.
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+import pandas as pd
+from scipy import stats as st
+import numpy as np 
+
+df = pd.read_csv('/datasets/games.csv')
+print(df.head(10))
+                        Name Platform  Year_of_Release         Genre  \
+0                 Wii Sports      Wii           2006.0        Sports   
+1          Super Mario Bros.      NES           1985.0      Platform   
+2             Mario Kart Wii      Wii           2008.0        Racing   
+3          Wii Sports Resort      Wii           2009.0        Sports   
+4   Pokemon Red/Pokemon Blue       GB           1996.0  Role-Playing   
+5                     Tetris       GB           1989.0        Puzzle   
+6      New Super Mario Bros.       DS           2006.0      Platform   
+7                   Wii Play      Wii           2006.0          Misc   
+8  New Super Mario Bros. Wii      Wii           2009.0      Platform   
+9                  Duck Hunt      NES           1984.0       Shooter   
+
+   NA_sales  EU_sales  JP_sales  Other_sales  Critic_Score User_Score Rating  
+0     41.36     28.96      3.77         8.45          76.0          8      E  
+1     29.08      3.58      6.81         0.77           NaN        NaN    NaN  
+2     15.68     12.76      3.79         3.29          82.0        8.3      E  
+3     15.61     10.93      3.28         2.95          80.0          8      E  
+4     11.27      8.89     10.22         1.00           NaN        NaN    NaN  
+5     23.20      2.26      4.22         0.58           NaN        NaN    NaN  
+6     11.28      9.14      6.50         2.88          89.0        8.5      E  
+7     13.96      9.18      2.93         2.84          58.0        6.6      E  
+8     14.44      6.94      4.70         2.24          87.0        8.4      E  
+9     26.93      0.63      0.28         0.47           NaN        NaN    NaN  
+
+df.info()
+<class 'pandas.core.frame.DataFrame'>
+RangeIndex: 16715 entries, 0 to 16714
+Data columns (total 11 columns):
+Name               16713 non-null object
+Platform           16715 non-null object
+Year_of_Release    16446 non-null float64
+Genre              16713 non-null object
+NA_sales           16715 non-null float64
+EU_sales           16715 non-null float64
+JP_sales           16715 non-null float64
+Other_sales        16715 non-null float64
+Critic_Score       8137 non-null float64
+User_Score         10014 non-null object
+Rating             9949 non-null object
+dtypes: float64(6), object(5)
+memory usage: 1.4+ MB
+
+Видим пропуски в названии игры и жанре по 2 шт, возможно, что одна и та же игра 
+Пропуски в году релиза пропуски в оценке критиков Пропуски в оценке игроками Пропуски в рейтинге 
+( возможно стоить поискать зависимость оценок друг от друга и заполнить по соответствубщим друг другу оценки пропущенные, 
+а рейтинг от жанра)
+
+Шаг 2. Подготовка данных
+
+df.set_axis(
+    ['name','platform','year_of_release','genre','na_sales','eu_sales','jp_sales','other_sales','critic_score','user_score','rating'],
+    axis = 'columns',inplace = True)
+
+df['name'] = df['name'].str.lower()
+df['platform'] = df['platform'].str.lower()
+df['genre'] = df['genre'].str.lower()
+print(df.head())
+                       name platform  year_of_release         genre  na_sales  \
+0                wii sports      wii           2006.0        sports     41.36   
+1         super mario bros.      nes           1985.0      platform     29.08   
+2            mario kart wii      wii           2008.0        racing     15.68   
+3         wii sports resort      wii           2009.0        sports     15.61   
+4  pokemon red/pokemon blue       gb           1996.0  role-playing     11.27   
+
+   eu_sales  jp_sales  other_sales  critic_score user_score rating  
+0     28.96      3.77         8.45          76.0          8      E  
+1      3.58      6.81         0.77           NaN        NaN    NaN  
+2     12.76      3.79         3.29          82.0        8.3      E  
+3     10.93      3.28         2.95          80.0          8      E  
+4      8.89     10.22         1.00           NaN        NaN    NaN  
+
+df['name'] = df['name'].fillna('unknown')
+df['genre'] = df['genre'].fillna('unknown')
+
+df['user_score'] = df['user_score'].replace('tbd','11')
+#маркер для tbd - 11
+
+df['user_score'] =  pd.to_numeric(df['user_score'], errors='coerce')
+
+print(df.head())
+                       name platform  year_of_release         genre  na_sales  \
+0                wii sports      wii           2006.0        sports     41.36   
+1         super mario bros.      nes           1985.0      platform     29.08   
+2            mario kart wii      wii           2008.0        racing     15.68   
+3         wii sports resort      wii           2009.0        sports     15.61   
+4  pokemon red/pokemon blue       gb           1996.0  role-playing     11.27   
+
+   eu_sales  jp_sales  other_sales  critic_score  user_score rating  
+0     28.96      3.77         8.45          76.0         8.0      E  
+1      3.58      6.81         0.77           NaN         NaN    NaN  
+2     12.76      3.79         3.29          82.0         8.3      E  
+3     10.93      3.28         2.95          80.0         8.0      E  
+4      8.89     10.22         1.00           NaN         NaN    NaN  
+
+df.info()
+<class 'pandas.core.frame.DataFrame'>
+RangeIndex: 16715 entries, 0 to 16714
+Data columns (total 11 columns):
+name               16715 non-null object
+platform           16715 non-null object
+year_of_release    16446 non-null float64
+genre              16715 non-null object
+na_sales           16715 non-null float64
+eu_sales           16715 non-null float64
+jp_sales           16715 non-null float64
+other_sales        16715 non-null float64
+critic_score       8137 non-null float64
+user_score         10014 non-null float64
+rating             9949 non-null object
+dtypes: float64(7), object(4)
+memory usage: 1.4+ MB
+
+print(df['user_score'].value_counts().head(20))
+11.0    2424
+7.8      324
+8.0      290
+8.2      282
+8.3      254
+8.5      253
+7.5      251
+7.9      249
+8.1      244
+7.7      240
+7.3      236
+8.4      223
+7.6      220
+7.0      220
+7.4      215
+8.6      211
+6.8      197
+8.7      188
+8.8      186
+7.1      180
+Name: user_score, dtype: int64
+
+print(df.query('user_score == "11"')['critic_score'].value_counts().head(20))
+66.0    46
+65.0    44
+68.0    43
+70.0    42
+62.0    41
+59.0    41
+60.0    40
+57.0    38
+71.0    36
+53.0    35
+63.0    35
+67.0    34
+61.0    32
+54.0    31
+56.0    30
+58.0    30
+69.0    30
+55.0    30
+76.0    30
+64.0    28
+Name: critic_score, dtype: int64
+
+print(df.query('user_score == "11"')['year_of_release'].value_counts())
+2009.0    405
+2010.0    331
+2008.0    326
+2011.0    217
+2002.0    192
+2007.0    192
+2006.0    124
+2005.0    121
+2004.0    107
+2003.0     95
+2001.0     82
+2000.0     43
+2015.0     38
+2016.0     34
+2012.0     24
+2014.0     21
+2013.0     15
+1999.0      8
+1997.0      1
+Name: year_of_release, dtype: int64
+tbd - to be announced «будет объявлено дополнительно», значит игроки еще не оценили
+
+
+print(df['platform'].value_counts())
+ps2     2161
+ds      2151
+ps3     1331
+wii     1320
+x360    1262
+psp     1209
+ps      1197
+pc       974
+xb       824
+gba      822
+gc       556
+3ds      520
+psv      430
+ps4      392
+n64      319
+xone     247
+snes     239
+sat      173
+wiiu     147
+2600     133
+gb        98
+nes       98
+dc        52
+gen       29
+ng        12
+ws         6
+scd        6
+3do        3
+tg16       2
+gg         1
+pcfx       1
+Name: platform, dtype: int64
+
+print(df['year_of_release'].value_counts())
+2008.0    1427
+2009.0    1426
+2010.0    1255
+2007.0    1197
+2011.0    1136
+2006.0    1006
+2005.0     939
+2002.0     829
+2003.0     775
+2004.0     762
+2012.0     653
+2015.0     606
+2014.0     581
+2013.0     544
+2016.0     502
+2001.0     482
+1998.0     379
+2000.0     350
+1999.0     338
+1997.0     289
+1996.0     263
+1995.0     219
+1994.0     121
+1993.0      62
+1981.0      46
+1992.0      43
+1991.0      41
+1982.0      36
+1986.0      21
+1989.0      17
+1983.0      17
+1990.0      16
+1987.0      16
+1988.0      15
+1985.0      14
+1984.0      14
+1980.0       9
+Name: year_of_release, dtype: int64
+Стоит рассмотреть приставки и года выхода игр, откинуть неактуальное
+
+
+print(df['genre'].value_counts())
+action          3369
+sports          2348
+misc            1750
+role-playing    1498
+shooter         1323
+adventure       1303
+racing          1249
+platform         888
+simulation       873
+fighting         849
+strategy         683
+puzzle           580
+unknown            2
+Name: genre, dtype: int64
+
+print(df['rating'].value_counts())
+E       3990
+T       2961
+M       1563
+E10+    1420
+EC         8
+RP         3
+K-A        3
+AO         1
+Name: rating, dtype: int64
+
+# K-A = E в рейтинге
+df['rating'] = df['rating'].replace('K-A','E')
+
+print(df['critic_score'].value_counts().head(50))
+70.0    256
+71.0    254
+75.0    245
+78.0    240
+73.0    238
+80.0    237
+76.0    235
+72.0    226
+74.0    226
+77.0    225
+68.0    219
+81.0    218
+79.0    218
+69.0    215
+82.0    208
+83.0    206
+66.0    203
+65.0    192
+84.0    183
+67.0    182
+63.0    178
+62.0    170
+64.0    169
+61.0    165
+59.0    157
+60.0    156
+85.0    151
+58.0    151
+86.0    137
+57.0    132
+87.0    118
+88.0    116
+56.0    113
+55.0    110
+89.0    105
+53.0    103
+54.0    103
+51.0     90
+49.0     86
+50.0     79
+90.0     76
+52.0     73
+91.0     70
+48.0     67
+47.0     66
+46.0     56
+43.0     54
+92.0     54
+44.0     50
+45.0     47
+Name: critic_score, dtype: int64
+
+#взаимосвязь рейтингов
+score_dependence = df.query('critic_score > 0 and user_score > 0 and user_score < 11')[['critic_score','user_score']]
+sns.pairplot(score_dependence)
+<seaborn.axisgrid.PairGrid at 0x7fe476c878d0>
+
+
+print(score_dependence['critic_score'].corr(score_dependence['user_score']))
+0.5808778320767236
+взаимосвязь заметна, но не высока для вычисления одних пропущенных данных по другим
+
+
+df['critic_score'] = df['critic_score'].fillna(101)
+#маркер для неизвестных оценок critic_score 101
+df['user_score'] = df['user_score'].fillna(12)
+#маркер для неизвестных оценок user_score 12
+
+print(df.pivot_table(index=['genre','rating'],values='platform',aggfunc='count'))
+                     platform
+genre        rating          
+action       AO             1
+             E            416
+             E10+         481
+             EC             1
+             M            608
+             T            681
+adventure    E            162
+             E10+          68
+             EC             2
+             M             99
+             T            115
+fighting     E              8
+             E10+          19
+             M             49
+             T            362
+misc         E            458
+             E10+         167
+             EC             5
+             M             13
+             T            239
+platform     E            358
+             E10+         144
+             M              3
+             T             64
+puzzle       E            289
+             E10+          43
+             T             10
+racing       E            585
+             E10+          96
+             M             18
+             RP             1
+             T            172
+role-playing E             84
+             E10+         111
+             M            162
+             T            420
+shooter      E             48
+             E10+          58
+             M            565
+             T            348
+simulation   E            325
+             E10+          48
+             M              5
+             T            190
+sports       E           1188
+             E10+         107
+             M             16
+             T            198
+strategy     E             72
+             E10+          78
+             M             25
+             RP             2
+             T            162
+
+print(df.query('year_of_release <= 1994').info())
+#Рейтинг был разработан в 1994 году, при этом из почти 7000 пропущенных значений доля игр до рейтинга всего то 6%
+<class 'pandas.core.frame.DataFrame'>
+Int64Index: 488 entries, 1 to 16207
+Data columns (total 11 columns):
+name               488 non-null object
+platform           488 non-null object
+year_of_release    488 non-null float64
+genre              488 non-null object
+na_sales           488 non-null float64
+eu_sales           488 non-null float64
+jp_sales           488 non-null float64
+other_sales        488 non-null float64
+critic_score       488 non-null float64
+user_score         488 non-null float64
+rating             5 non-null object
+dtypes: float64(7), object(4)
+memory usage: 45.8+ KB
+None
+
+print(df.pivot_table(index=['platform','rating'],values='name',aggfunc='count').head(30))
+                 name
+platform rating      
+3ds      E         92
+         E10+      76
+         M         12
+         T         48
+dc       E          3
+         M          1
+         T         10
+ds       E        876
+         E10+     259
+         EC         2
+         M         10
+         T        126
+gba      E        426
+         E10+      25
+         M          7
+         T         64
+gc       E        230
+         E10+      31
+         EC         1
+         M         38
+         T        169
+pc       E        140
+         E10+      76
+         EC         2
+         M        256
+         RP         3
+         T        297
+ps       E        117
+         M         20
+         T         71
+
+df['rating'] = df['rating'].fillna('unknown')
+
+types = df['platform'].unique()
+for i in types:
+    median = df.loc[df['platform'] == i]['year_of_release'].median()
+    df.loc[df['platform'] == i, 'year_of_release'] = df.loc[df['platform'] == i, 'year_of_release'].fillna(median)
+
+df['all_sales'] = df['na_sales'] + df['eu_sales'] + df['jp_sales'] + df['other_sales']
+Возможно стоит обьединить платформы между собой по категориям и по году выпуска
+
+Шаг 3. Исследовательский анализ данных
+
+sns.distplot(df['year_of_release'], kde=False)
+<matplotlib.axes._subplots.AxesSubplot at 0x7fe47695d450>
+
+Видим рост начиная с 90х вплоть до 2010, затем следует спад Скорее всего спад связан с развитием игровой индустрии
+на смартфонах и планшетах, а их в данных нет
+
+
+print(df.pivot_table(index='platform', values='all_sales',aggfunc='sum').sort_values(by='all_sales', ascending=False))
+          all_sales
+platform           
+ps2         1255.77
+x360         971.42
+ps3          939.65
+wii          907.51
+ds           806.12
+ps           730.86
+gba          317.85
+ps4          314.14
+psp          294.05
+pc           259.52
+3ds          259.00
+xb           257.74
+gb           255.46
+nes          251.05
+n64          218.68
+snes         200.04
+gc           198.93
+xone         159.32
+2600          96.98
+wiiu          82.19
+psv           54.07
+sat           33.59
+gen           30.77
+dc            15.95
+scd            1.86
+ng             1.44
+ws             1.42
+tg16           0.16
+3do            0.10
+gg             0.04
+pcfx           0.03
+
+df_platform = df.pivot_table(index=['platform','year_of_release'], values='all_sales',aggfunc='sum')
+df_platform = df_platform.reset_index()
+
+df_platform_mean = df.pivot_table(index='platform', values='year_of_release',aggfunc=('min','max'))
+
+df_platform_mean['year']=df_platform_mean['max'] - df_platform_mean['min']
+
+df_platform_mean['year'].mean()
+7.612903225806452
+
+df_platform_mean['year'].median()
+6.0
+
+plt.rcParams['figure.figsize']=(14,10)
+sns.lineplot(x="year_of_release", y="all_sales",
+             hue="platform",
+             data=df_platform)
+<matplotlib.axes._subplots.AxesSubplot at 0x7fe4727b9e10>
+
+
+характерный срок появления и исчезновения новых приставок около 6 лет Данные берем за 3 года, 
+так как в 2013 году появилось новое поколение игровых консолей
+
+
+df_relevant = df.query('year_of_release > 2013')
+
+df_platform_relevant = df_relevant.pivot_table(index=['platform','year_of_release'], values='all_sales',aggfunc='sum')
+df_platform_relevant = df_platform_relevant.reset_index()
+
+plt.rcParams['figure.figsize']=(14,10)
+sns.lineplot(x="year_of_release", y="all_sales",
+             hue="platform",
+             data=df_platform_relevant)
+<matplotlib.axes._subplots.AxesSubplot at 0x7fe472295f50>
+
+
+print(df_relevant.pivot_table(index='platform', values='all_sales',aggfunc='sum').sort_values(by='all_sales', ascending=False))
+          all_sales
+platform           
+ps4          288.15
+xone         140.36
+3ds           86.68
+ps3           68.18
+x360          48.22
+wiiu          42.98
+pc            27.05
+psv           22.66
+wii            5.07
+psp            0.36
+Видим, что наибольшие продажи у ps4, при этом продажи практически у всех консолей падают,
+как я уже писал, связано это с ростом доли игр на телефонах и планшетах.
+Единственные платформы у которых наблюдается рост, но совершенно небольшой это psv и wii, 
+при этом уровень их продаж не сопоставим с уровнем падающих продаж на ps4,xone, 3ds Так что с учетом падения лидеров,
+стоит рассматривать именно их
+
+
+sns.boxplot(x="platform", y="all_sales", data=df_platform_relevant, palette='rainbow')
+<matplotlib.axes._subplots.AxesSubplot at 0x7fe47222c090>
+
+Видим, что даже нижний разброс по ps4 больше, чем верхний разброс у xone,
+при этом разброс значений в меньшую сторону у xone выше, что говорит о ps4 как о неоспоримом лидере А 
+так же несмотря на утрачивающее свою актуальность ps3 обгоняет более современнное wiiu и не так далеко ушло от 3ds
+
+
+df_ps4 = df_relevant.query('platform == "ps4" and user_score < 11 and critic_score < 101')
+
+sns.pairplot(df_ps4[['critic_score','user_score','all_sales']])
+<seaborn.axisgrid.PairGrid at 0x7fe472335dd0>
+
+
+print(df_ps4['critic_score'].corr(df_ps4['all_sales']))
+0.40190287811475334
+
+print(df_ps4['user_score'].corr(df_ps4['all_sales']))
+-0.04318585997193634
+
+df_xone = df_relevant.query('platform == "xone" and user_score < 11 and critic_score < 101')
+
+sns.pairplot(df_xone[['critic_score','user_score','all_sales']])
+<seaborn.axisgrid.PairGrid at 0x7fe470493c10>
+
+
+print(df_xone['critic_score'].corr(df_xone['all_sales']))
+0.42211185105557647
+
+print(df_xone['user_score'].corr(df_xone['all_sales']))
+-0.0917343450331075
+Мы видим слабую прямую взаимосвязь продаж с оценками критиков и никакой взаимосвязи между продажами и оценками пользователей.
+Второе объясняется очень легко, ведь для пользовательской оценки игру надо купить,
+а что там дальше поставит пользователь уже не так важно, ведь игра куплена. Скорее всего игры продаются по предзаказу, 
+и оценки критиков и пользователей появятся уже после первой волны продаж. Если человек фанат игры ему не так важно мнение других.
+
+
+sns.boxplot(x="genre", y="all_sales", data=df_relevant, palette='rainbow')
+<matplotlib.axes._subplots.AxesSubplot at 0x7fe46fffe910>
+
+
+print(df_relevant.pivot_table(index='genre',values='all_sales',aggfunc=('mean','median','sum','count')).sort_values(by='sum',ascending=False))
+              count      mean  median     sum
+genre                                        
+action          619  0.322068   0.090  199.36
+shooter         128  1.335469   0.515  170.94
+sports          161  0.680000   0.180  109.48
+role-playing    222  0.458108   0.110  101.70
+misc            113  0.332301   0.090   37.55
+fighting         60  0.470333   0.125   28.22
+racing           69  0.398841   0.090   27.52
+platform         38  0.476053   0.140   18.09
+adventure       185  0.094865   0.030   17.55
+simulation       44  0.298409   0.100   13.13
+strategy         37  0.107027   0.060    3.96
+puzzle           14  0.157857   0.045    2.21
+Видим, что лучший по продоваемости жанр - shooter, при этом денег он принесет больше чем самый популярный жанр action,
+при меньшем количестве игр. На втором месте жанр - sports На третьем role-playing На четвертом, при этом самый популярный action
+
+Шаг 4. Портрет пользователя каждого региона
+
+df_platform_na_region = df_relevant.pivot_table(index='platform', values='na_sales',aggfunc=('sum','count')).sort_values(by='sum',ascending=False)
+df_platform_na_region['share'] = df_platform_na_region['sum'] / df_platform_na_region['sum'].sum()
+print(df_platform_na_region)
+          count    sum     share
+platform                        
+ps4         376  98.61  0.347011
+xone        228  81.27  0.285991
+x360        111  28.30  0.099588
+3ds         212  22.64  0.079671
+ps3         219  22.05  0.077594
+wiiu         73  19.36  0.068128
+pc          151   7.23  0.025443
+psv         296   2.63  0.009255
+wii          11   2.08  0.007320
+psp          13   0.00  0.000000
+Топ 5 для na это: ps4, xone, x360, 3ds, ps3 при этом основную долю рынка делят между собой sony и microsoft
+
+
+df_platform_jp_region = df_relevant.pivot_table(index='platform', values='jp_sales',aggfunc=('sum','count')).sort_values(by='sum',ascending=False)
+df_platform_jp_region['share'] = df_platform_jp_region['sum'] / df_platform_jp_region['sum'].sum()
+print(df_platform_jp_region)
+          count    sum     share
+platform                        
+3ds         212  44.24  0.474882
+ps4         376  15.02  0.161228
+psv         296  14.61  0.156827
+ps3         219  11.22  0.120438
+wiiu         73   7.31  0.078467
+psp          13   0.36  0.003864
+xone        228   0.32  0.003435
+x360        111   0.08  0.000859
+pc          151   0.00  0.000000
+wii          11   0.00  0.000000
+Топ 5 для jp это: 3ds, ps4, psv, ps3, wiiu при этом основную долю рынка делят между собой sony и nintendo,
+практически весь японский рынок захвачены японскими же консолями, при этом у нинтендо более 50%
+
+
+df_platform_eu_region = df_relevant.pivot_table(index='platform', values='eu_sales',aggfunc=('sum','count')).sort_values(by='sum',ascending=False)
+df_platform_eu_region['share'] = df_platform_eu_region['sum'] / df_platform_eu_region['sum'].sum()
+print(df_platform_eu_region)
+          count     sum     share
+platform                         
+ps4         376  130.04  0.480331
+xone        228   46.25  0.170834
+ps3         219   25.54  0.094338
+pc          151   17.97  0.066376
+3ds         212   16.12  0.059543
+x360        111   15.49  0.057216
+wiiu         73   13.15  0.048572
+psv         296    3.58  0.013224
+wii          11    2.59  0.009567
+psp          13    0.00  0.000000
+топ 5 для eu это: ps4, xone, ps3, pc, 3ds при этом основную долю рынка у sony более 50%
+
+Выделим основные платформы для которых стоит рассматривать игры 
+1 место несомненно ps4(самая большая доля в Европе и Северной Америке, 
+2 наибольшая в Японии) 2 место xone (2 место в Европе и Северной Америке, + небольшая доля в Японии)
+3 место 3ds (Самая большая доля в Японии, + 2 небольшие доли в Европе и Северной Америке) 
+4 место ps3(хотя стоит учитывать, что она постепенно вытесняется с рынка новой ps4, 
+но за будующий год своей популярности в разы еще не потеряет) 
+5 место x360 ( за счет рынков Европы и Северной америки, ситуация анологична с ps3 b ps4)
+
+
+df_genre_na_region = df_relevant.pivot_table(index='genre', values='na_sales',aggfunc=('sum','count')).sort_values(by='sum',ascending=False)
+df_genre_na_region['share'] = df_genre_na_region['sum'] / df_genre_na_region['sum'].sum()
+print(df_genre_na_region)
+              count    sum     share
+genre                               
+shooter         128  79.02  0.278073
+action          619  72.53  0.255235
+sports          161  46.13  0.162332
+role-playing    222  33.58  0.118169
+misc            113  15.05  0.052961
+fighting         60  12.43  0.043741
+racing           69   8.74  0.030756
+platform         38   6.79  0.023894
+adventure       185   5.64  0.019847
+simulation       44   2.63  0.009255
+strategy         37   0.98  0.003449
+puzzle           14   0.65  0.002287
+
+df_genre_jp_region = df_relevant.pivot_table(index='genre', values='jp_sales',aggfunc=('sum','count')).sort_values(by='sum',ascending=False)
+df_genre_jp_region['share'] = df_genre_jp_region['sum'] / df_genre_jp_region['sum'].sum()
+print(df_genre_jp_region)
+              count    sum     share
+genre                               
+role-playing    222  31.23  0.335230
+action          619  29.58  0.317518
+fighting         60   6.37  0.068377
+misc            113   5.61  0.060219
+shooter         128   4.87  0.052276
+adventure       185   3.60  0.038643
+sports          161   3.26  0.034994
+platform         38   2.69  0.028875
+simulation       44   2.31  0.024796
+racing           69   1.76  0.018892
+strategy         37   0.95  0.010198
+puzzle           14   0.93  0.009983
+
+df_genre_eu_region = df_relevant.pivot_table(index='genre', values='eu_sales',aggfunc=('sum','count')).sort_values(by='sum',ascending=False)
+df_genre_eu_region['share'] = df_genre_eu_region['sum'] / df_genre_eu_region['sum'].sum()
+print(df_genre_eu_region)
+              count    sum     share
+genre                               
+action          619  74.68  0.275847
+shooter         128  65.52  0.242012
+sports          161  45.73  0.168914
+role-playing    222  28.22  0.104237
+racing           69  14.13  0.052192
+misc            113  12.86  0.047501
+simulation       44   7.30  0.026964
+platform         38   6.80  0.025117
+fighting         60   6.69  0.024711
+adventure       185   6.49  0.023972
+strategy         37   1.79  0.006612
+puzzle           14   0.52  0.001921
+Выделим основные жанры для которых стоит рассматривать игры 
+1 место shooter(1 место в Северной Америке и 2 в Европе при этом в Японии лишь на 5 месте,
+при этом количество выпускаемых игр не так много, а значит все они в основном высокоприбыльные) 
+2 место action(1 место в Европе и 2 вторых места, при этом стоит учитывать, что не каждая игра в этом жанре хорошо продается, 
+а лишь за счет массовости игр достигается такая большая доля, стоит это учесть при выборе игры) 
+3 и 4 место делят между собой sports и role-playing(продажи по регионам приблизительно равны)
+5 место misc
+
+
+df_rating_na_region = df_relevant.pivot_table(index='rating', values='na_sales',aggfunc=('sum','count')).sort_values(by='sum',ascending=False)
+df_rating_na_region['share'] = df_rating_na_region['sum'] / df_rating_na_region['sum'].sum()
+print(df_rating_na_region)
+         count    sum     share
+rating                         
+M          265  96.42  0.339304
+unknown    749  64.72  0.227751
+E          219  50.74  0.178555
+T          272  39.06  0.137453
+E10+       185  33.23  0.116937
+
+df_rating_jp_region = df_relevant.pivot_table(index='rating', values='jp_sales',aggfunc=('sum','count')).sort_values(by='sum',ascending=False)
+df_rating_jp_region['share'] = df_rating_jp_region['sum'] / df_rating_jp_region['sum'].sum()
+print(df_rating_jp_region)
+         count    sum     share
+rating                         
+unknown    749  56.90  0.610777
+T          272  14.85  0.159403
+E          219   8.94  0.095964
+M          265   8.01  0.085981
+E10+       185   4.46  0.047875
+
+df_rating_eu_region = df_relevant.pivot_table(index='rating', values='eu_sales',aggfunc=('sum','count')).sort_values(by='sum',ascending=False)
+df_rating_eu_region['share'] = df_rating_eu_region['sum'] / df_rating_eu_region['sum'].sum()
+print(df_rating_eu_region)
+         count    sum     share
+rating                         
+M          265  93.44  0.345141
+unknown    749  58.95  0.217745
+E          219  58.06  0.214457
+T          272  34.12  0.126030
+E10+       185  26.16  0.096628
+Рейтинг M не младше 17 очень сильно влияет на продажи в Японии, доля таких игр там очень мала.
+И есть еще игры у которых рейтинг неизвестен, но доля продаж этих игр везде высока. 
+Так что при учете продажи игр в японию следует учитывать игры с рейтингом M
+
+Шаг 5. Проверка гипотез
+
+print(df_relevant.query('user_score < 11').info())
+<class 'pandas.core.frame.DataFrame'>
+Int64Index: 889 entries, 42 to 16692
+Data columns (total 12 columns):
+name               889 non-null object
+platform           889 non-null object
+year_of_release    889 non-null float64
+genre              889 non-null object
+na_sales           889 non-null float64
+eu_sales           889 non-null float64
+jp_sales           889 non-null float64
+other_sales        889 non-null float64
+critic_score       889 non-null float64
+user_score         889 non-null float64
+rating             889 non-null object
+all_sales          889 non-null float64
+dtypes: float64(8), object(4)
+memory usage: 90.3+ KB
+None
+
+#Нулевая гипотеза о том, что Средние пользовательские рейтинги платформ Xbox One и PC одинаковые
+alpha = 0.05
+results = st.ttest_ind(
+    df_relevant.query('user_score < 11 and platform == "xone"')['user_score'], 
+    df_relevant.query('user_score < 11 and platform == "pc"')['user_score'])
+​
+print('p-значение:', results.pvalue)
+​
+if (results.pvalue < alpha):
+    print("Отвергаем нулевую гипотезу")
+else:
+    print("Не получилось отвергнуть нулевую гипотезу")
+#Существует 10% вероятность совпадения средних пользовательских рейтингов на Xbox One и PC
+p-значение: 0.10450507919348415
+Не получилось отвергнуть нулевую гипотезу
+
+#Нулевая гипотеза о том, что редние пользовательские рейтинги жанров Action и Sports разные
+alpha = 0.05
+results = st.ttest_ind(
+    df_relevant.query('user_score < 11 and genre == "action"')['user_score'], 
+    df_relevant.query('user_score < 11 and genre == "sports"')['user_score'])
+​
+print('p-значение:', results.pvalue)
+​
+if (results.pvalue < alpha):
+    print("Не получилось отвергнуть нулевую гипотезу")
+else:
+    print("Отвергаем нулевую гипотезу")
+#Слишком мала вероятность того, что средние Action и Sports одинаковые
+p-значение: 2.8711147985105864e-19
+Не получилось отвергнуть нулевую гипотезу
+
+
+Вывод
+Планируя продажи на следующий год следует учитывать:
+
+Общий рынок по продажам игр на консолях и пк становиться меньше, так как мобильные игры начинают занимать там место
+Маркетинг стоит выстроивать для каждого рынка(европа, америка,япония) отдельно
+Учитывать платформы актуальные для каждого рынка( в общем сводящиеся к ps4, xone, 3ds, ps3 , x360)
+Учитывать рейтинг M для продаж на Японию и не ориентировать туда игры с таким рейтингом
+Оценка критиков должна лишь задавать вектор, но не давать ориентир какие игры выбирать, лучше рассмотреть количество предзаказов на игры или рейтинг ожидания игр
+Не ориентироваться на пользовательские оценки игры
+В качестве жанров рассмотреть : shooter, sports, role-playing, misc
+При выборе жанра action быть очень внимательным при выборе игры(стоит отдельно проанализировать игры в этом жанре)
+Задуматься о продаже мобильных игр
+Комментарий наставника
+Точные и обоснованные выводы, супер)
+
+
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
